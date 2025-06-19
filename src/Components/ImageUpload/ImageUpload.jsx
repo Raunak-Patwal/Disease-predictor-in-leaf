@@ -1,41 +1,73 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useContext } from "react";
 import Webcam from "react-webcam";
+import fetchPrediction from "../Fetch/Fetch";
+import { useNavigate } from "react-router-dom";
+import { PredictionContext } from "../Fetch/PredictionContext";
 
-function ImageUpload({ predictions = [], setPredictions = () => {} }) {
+function ImageUpload() {
   const fileInputRef = useRef();
   const webcamRef = useRef();
-  const [image, setImage] = useState(null);
+  const navigate = useNavigate();
+  const { predictions, setPredictions } = useContext(PredictionContext);
+
+  const [imagePreview, setImagePreview] = useState(null);
+  const [file, setFile] = useState(null);
   const [useCamera, setUseCamera] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const capture = () => {
-    const imageSrc = webcamRef.current.getScreenshot();
-    setImage(imageSrc);
-    setUseCamera(false);
+    const screenshot = webcamRef.current.getScreenshot();
+    if (screenshot) {
+      fetch(screenshot)
+        .then((res) => res.blob())
+        .then((blob) => {
+          const fileFromCam = new File([blob], "captured.jpg", { type: "image/jpeg" });
+          setFile(fileFromCam);
+          setImagePreview(URL.createObjectURL(fileFromCam));
+          setUseCamera(false);
+        });
+    }
   };
 
   const handleUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setImage(URL.createObjectURL(file));
-    }
+    const uploadedFile = e.target.files[0];
+    if (!uploadedFile) return;
+    setImagePreview(URL.createObjectURL(uploadedFile));
+    setFile(uploadedFile);
   };
 
-  const handlePredict = () => {
-    if (!image) return alert("Upload or capture an image first.");
-    const fakeResult = {
-      id: Date.now(),
-      name: "Predicted Disease",
-      date: new Date().toLocaleDateString(),
-    };
-    setPredictions([fakeResult, ...predictions]);
+  const handlePredict = async () => {
+    if (!file) return alert("Please upload or capture an image.");
+    setLoading(true);
+
+    const result = await fetchPrediction(file);
+
+    if (result?.class) {
+      const predictionData = {
+        id: Date.now(),
+        name: result.class,
+        date: new Date().toLocaleDateString(),
+        imageUrl: imagePreview,
+      };
+
+      const updated = [predictionData, ...predictions];
+      setPredictions(updated);
+
+      navigate(`/result/${result.class.toLowerCase().replace(" ", "-")}`, {
+        state: { imageUrl: imagePreview },
+      });
+    } else {
+      alert("Prediction failed. Try again.");
+    }
+
+    setLoading(false);
   };
 
   const handleCancel = () => {
-    setImage(null);
+    setFile(null);
+    setImagePreview(null);
     setUseCamera(false);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = null;
-    }
+    if (fileInputRef.current) fileInputRef.current.value = null;
   };
 
   return (
@@ -43,9 +75,9 @@ function ImageUpload({ predictions = [], setPredictions = () => {} }) {
       <h2 className="mb-6 text-xl font-bold text-green-200">Upload a Leaf Image</h2>
 
       <div className="flex flex-col items-center gap-6">
-        {image && (
+        {imagePreview && (
           <img
-            src={image}
+            src={imagePreview}
             alt="Preview"
             className="w-full max-w-sm border shadow-lg rounded-xl border-white/20"
           />
@@ -83,6 +115,7 @@ function ImageUpload({ predictions = [], setPredictions = () => {} }) {
                 Capture from Camera
               </button>
             </div>
+
             <input
               ref={fileInputRef}
               type="file"
@@ -93,18 +126,17 @@ function ImageUpload({ predictions = [], setPredictions = () => {} }) {
           </>
         )}
 
-        {/* Action Buttons */}
         <div className="flex flex-wrap justify-center gap-4 mt-6">
           <button
             onClick={handlePredict}
-            disabled={!image}
+            disabled={!file || loading}
             className={`px-8 py-3 font-semibold rounded-xl transition ${
-              image
+              file && !loading
                 ? "bg-green-700 hover:bg-green-600 text-white"
                 : "bg-gray-600 text-gray-300 cursor-not-allowed"
             }`}
           >
-            Predict
+            {loading ? "Predicting..." : "Predict"}
           </button>
 
           <button

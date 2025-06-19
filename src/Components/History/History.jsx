@@ -1,14 +1,27 @@
-function History({ predictions = [], setPredictions = () => {} }) {
+import { useContext } from "react";
+import { useNavigate } from "react-router-dom";
+import { PredictionContext } from "../Fetch/PredictionContext";
+
+function History() {
+  const { predictions, setPredictions } = useContext(PredictionContext);
+  const navigate = useNavigate();
+
   const clearAll = () => setPredictions([]);
   const deleteOne = (id) => {
     setPredictions(predictions.filter((item) => item.id !== id));
+  };
+
+  const handleClick = (item) => {
+    navigate(`/result/${item.name.toLowerCase().replace(" ", "-")}`, {
+      state: { imageUrl: item.imageUrl },
+    });
   };
 
   return (
     <div className="p-5 border shadow-lg bg-white/5 backdrop-blur-md rounded-2xl border-white/10">
       <h2 className="mb-4 text-xl font-bold text-green-200">Prediction History</h2>
 
-      {Array.isArray(predictions) && predictions.length === 0 ? (
+      {predictions.length === 0 ? (
         <p className="text-sm text-white/60">No predictions made yet.</p>
       ) : (
         <>
@@ -16,9 +29,9 @@ function History({ predictions = [], setPredictions = () => {} }) {
             {predictions.map((item) => (
               <li
                 key={item.id}
-                className="flex items-center justify-between p-3 transition rounded-lg bg-white/10 hover:bg-white/15"
+                className="flex items-center justify-between p-3 transition rounded-lg cursor-pointer bg-white/10 hover:bg-white/15"
               >
-                <div>
+                <div onClick={() => handleClick(item)} className="flex-1">
                   <p className="font-semibold">{item.name}</p>
                   <span className="text-xs text-white/60">{item.date}</span>
                 </div>
