@@ -1,7 +1,8 @@
 import { useRef, useState, useContext } from "react";
 import Webcam from "react-webcam";
-import fetchPrediction from "../Fetch/Fetch";
 import { useNavigate } from "react-router-dom";
+import fetchPrediction from "../Fetch/Fetch";
+import fetchSeverity from "../Fetch/FetchSeverity";
 import { PredictionContext } from "../Fetch/PredictionContext";
 
 function ImageUpload() {
@@ -15,52 +16,64 @@ function ImageUpload() {
   const [useCamera, setUseCamera] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const capture = () => {
+  const capture = async () => {
     const screenshot = webcamRef.current.getScreenshot();
-    if (screenshot) {
-      fetch(screenshot)
-        .then((res) => res.blob())
-        .then((blob) => {
-          const fileFromCam = new File([blob], "captured.jpg", { type: "image/jpeg" });
-          setFile(fileFromCam);
-          setImagePreview(URL.createObjectURL(fileFromCam));
-          setUseCamera(false);
-        });
-    }
+    if (!screenshot) return;
+
+    const blob = await fetch(screenshot).then((res) => res.blob());
+    const camFile = new File([blob], "captured.jpg", { type: "image/jpeg" });
+
+    setFile(camFile);
+    setImagePreview(URL.createObjectURL(camFile));
+    setUseCamera(false);
   };
 
   const handleUpload = (e) => {
     const uploadedFile = e.target.files[0];
     if (!uploadedFile) return;
-    setImagePreview(URL.createObjectURL(uploadedFile));
+
     setFile(uploadedFile);
+    setImagePreview(URL.createObjectURL(uploadedFile));
   };
 
   const handlePredict = async () => {
     if (!file) return alert("Please upload or capture an image.");
     setLoading(true);
 
-    const result = await fetchPrediction(file);
+    try {
+      const result = await fetchPrediction(file);
+      console.log("🧪 Disease Class:", result.class);
 
-    if (result?.class) {
+      if (!result?.class) {
+        alert("Prediction failed.");
+        return;
+      }
+
+      const severityData = await fetchSeverity(file);
       const predictionData = {
         id: Date.now(),
         name: result.class,
         date: new Date().toLocaleDateString(),
         imageUrl: imagePreview,
+        severity: severityData.severity,
+        affectedImage: severityData.affected_image_url || `data:image/png;base64,${severityData.segmentation_mask_base64}`,
       };
 
-      const updated = [predictionData, ...predictions];
-      setPredictions(updated);
+      setPredictions([predictionData, ...predictions]);
 
       navigate(`/result/${result.class.toLowerCase().replace(" ", "-")}`, {
-        state: { imageUrl: imagePreview },
+        state: {
+          imageUrl: imagePreview,
+          severity: predictionData.severity,
+          affectedImage: predictionData.affectedImage,
+        },
       });
-    } else {
-      alert("Prediction failed. Try again.");
+    } catch (err) {
+      console.error("❌ Prediction Error:", err);
+      alert("An error occurred during prediction.");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleCancel = () => {
