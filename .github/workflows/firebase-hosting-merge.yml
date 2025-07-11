@@ -5,16 +5,36 @@ name: Deploy to Firebase Hosting on merge
 on:
   push:
     branches:
-      - main
+      - main # Your main branch. If it's 'master', change it here.
+
 jobs:
   build_and_deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # Or windows-latest, macos-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - run: npm run build
-      - uses: FirebaseExtended/action-hosting-deploy@v0
+      - name: Checkout code
+        uses: actions/checkout@v4 # Step 1: Get your repository code
+
+      - name: Set up Node.js environment # Step 2: Provide Node.js and NPM/Yarn
+        uses: actions/setup-node@v4
+        with:
+          node-version:
+            "18" # Specify the Node.js version your project uses (e.g., '16', '18', '20').
+            # Match this with your local development environment's Node.js version.
+          cache: "npm" # Use 'npm' to cache dependencies. If you use Yarn, change this to 'yarn'.
+
+      - name: Install dependencies # Step 3: Install all packages from package.json
+        run: npm install # If you use Yarn, change this to 'yarn install'.
+
+      - name: Build project # Step 4: Run your build script (which calls Vite)
+        run: npm run build # If you use Yarn, change this to 'yarn build'.
+
+      - name: Deploy to Firebase Hosting # Step 5: Deploy the built files
+        uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_POTATO_LEAF_DISEASE_PREDICTOR }}
           channelId: live
           projectId: potato-leaf-disease-predictor
+          # The 'public' directory is implicitly picked up from your firebase.json
+          # You typically don't need 'entryPoint' or 'buildCommand' if you have separate steps for build/install.
