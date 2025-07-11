@@ -5,6 +5,13 @@ module.exports = {
   content: ["./src/**/*.{js,jsx,ts,tsx}"],
   theme: {
     extend: {
+      animation: {
+        "spin-slow": "spin 40s linear infinite",
+      },
+      backgroundImage: {
+        "radial-vortex":
+          "radial-gradient(circle, #10b98144, #10b98122, transparent)",
+      },
       colors: {
         // Override Tailwind color palette with safe RGB variants
         primary: colors.green,
@@ -30,11 +37,11 @@ module.exports = {
     themes: [
       {
         customtheme: {
-          primary: "#22c55e",     // Green
-          secondary: "#ef4444",   // Red
-          accent: "#3b82f6",      // Blue
-          neutral: "#1f2937",     // Gray-800
-          "base-100": "#1e1e1e",  // Dark base
+          primary: "#22c55e", // Green
+          secondary: "#ef4444", // Red
+          accent: "#3b82f6", // Blue
+          neutral: "#1f2937", // Gray-800
+          "base-100": "#1e1e1e", // Dark base
         },
       },
       // optional: keep other themes too

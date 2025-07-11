@@ -1,15 +1,16 @@
+// In Fetchmulticlass.jsx
 import axios from "axios";
 
-const fetchPrediction = async (file) => {
+const fetchmulticlass = async (file) => {
   try {
     const formData = new FormData();
-    formData.append("file", file); 
+    formData.append("file", file);
     const response = await axios.post(
-      "https://potato-disease-prediction-using-cnn-9.onrender.com/predict",
+      "https://rishab1090-multi.hf.space/predict", // <-- CORRECTED URL
       formData,
       {
         headers: {
-          "x-api-key": "your-secret-api-key"          
+          "x-api-key": "mysecretkey"
         },
       }
     );
@@ -22,4 +23,4 @@ const fetchPrediction = async (file) => {
   }
 };
 
-export default fetchPrediction;
+export default fetchmulticlass;

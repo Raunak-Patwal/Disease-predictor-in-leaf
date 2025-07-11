@@ -17,6 +17,10 @@ function History() {
         imageUrl: item.imageUrl,
         severity: item.severity,
         affectedImage: item.affectedImage,
+        // --- ADDED: Pass multiClassPrediction and specificFungiPrediction ---
+        multiClassPrediction: item.multiClassPrediction,
+        specificFungiPrediction: item.specificFungiPrediction,
+        // --- END ADDITIONS ---
       },
     });
   };

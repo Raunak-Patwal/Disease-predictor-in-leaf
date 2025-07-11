@@ -1,5 +1,6 @@
 import { PieChart, Pie, Cell, Legend, ResponsiveContainer } from "recharts";
 import { motion } from "framer-motion";
+import { useMemo } from "react";
 
 const COLORS = ["#e11d48", "#10b981"];
 
@@ -21,7 +22,7 @@ const getChartData = (severity) => {
 };
 
 function ImageComparison({ severity }) {
-  const chartData = getChartData(severity);
+  const chartData = useMemo(() => getChartData(severity), [severity]);
 
   return (
     <motion.div

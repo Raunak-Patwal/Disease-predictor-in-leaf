@@ -1,9 +1,19 @@
-import { useRef, useState, useContext } from "react";
+import { useRef, useState, useContext, useEffect } from "react";
 import Webcam from "react-webcam";
 import { useNavigate } from "react-router-dom";
 import fetchPrediction from "../Fetch/Fetch";
 import fetchSeverity from "../Fetch/FetchSeverity";
 import { PredictionContext } from "../Fetch/PredictionContext";
+import { Client } from "@gradio/client";
+
+const fileToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = (error) => reject(error);
+  });
+};
 
 function ImageUpload() {
   const fileInputRef = useRef();
@@ -11,66 +21,141 @@ function ImageUpload() {
   const navigate = useNavigate();
   const { predictions, setPredictions } = useContext(PredictionContext);
 
-  const [imagePreview, setImagePreview] = useState(null);
+  const [imagePreviewBase64, setImagePreviewBase64] = useState(null);
   const [file, setFile] = useState(null);
   const [useCamera, setUseCamera] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    return () => {
+      if (imagePreviewBase64) {
+        // Clean up if needed
+      }
+    };
+  }, [imagePreviewBase64]);
+
   const capture = async () => {
     const screenshot = webcamRef.current.getScreenshot();
     if (!screenshot) return;
-
     const blob = await fetch(screenshot).then((res) => res.blob());
     const camFile = new File([blob], "captured.jpg", { type: "image/jpeg" });
 
+    if (imagePreviewBase64) setImagePreviewBase64(null);
     setFile(camFile);
-    setImagePreview(URL.createObjectURL(camFile));
+    const base64 = await fileToBase64(camFile);
+    setImagePreviewBase64(base64);
     setUseCamera(false);
   };
 
-  const handleUpload = (e) => {
+  const handleUpload = async (e) => {
     const uploadedFile = e.target.files[0];
     if (!uploadedFile) return;
-
+    if (imagePreviewBase64) setImagePreviewBase64(null);
     setFile(uploadedFile);
-    setImagePreview(URL.createObjectURL(uploadedFile));
+    const base64 = await fileToBase64(uploadedFile);
+    setImagePreviewBase64(base64);
   };
 
   const handlePredict = async () => {
-    if (!file) return alert("Please upload or capture an image.");
+    if (!file) {
+      alert("Please upload or capture an image.");
+      return;
+    }
     setLoading(true);
 
-    try {
-      const result = await fetchPrediction(file);
-      console.log("🧪 Disease Class:", result.class);
+    let finalDiseaseName = null;
+    let multiClassResult = null;
+    let specificDiseasePrediction = null;
+    let severityData = null;
+    let gradioSegmentedImageBase64 = null;
+    let predictionSource = "gradio";
 
-      if (!result?.class) {
-        alert("Prediction failed.");
+    try {
+      const client = await Client.connect("rishab1090/potato6");
+      const gradioResult = await client.predict("/predict", { image: file });
+
+      const gradioPredictedDiseaseLabel = gradioResult.data[0]?.label;
+      const gradioProbabilities = gradioResult.data[1];
+      const gradioImageObject = gradioResult.data[2];
+
+      if (gradioImageObject?.url) {
+        if (gradioImageObject.url.startsWith("data:image/")) {
+          gradioSegmentedImageBase64 = gradioImageObject.url;
+        } else {
+          const response = await fetch(gradioImageObject.url);
+          if (response.ok) {
+            const blob = await response.blob();
+            gradioSegmentedImageBase64 = await fileToBase64(blob);
+          }
+        }
+      }
+
+      multiClassResult = {
+        prediction: gradioPredictedDiseaseLabel,
+        probabilities: gradioProbabilities,
+      };
+
+      severityData = await fetchSeverity(file);
+
+      let finalAffectedImageForState = null;
+      if (severityData?.affected_image_url?.startsWith("data:image/")) {
+        finalAffectedImageForState = severityData.affected_image_url;
+      } else if (severityData?.segmentation_mask_base64) {
+        finalAffectedImageForState = `data:image/png;base64,${severityData.segmentation_mask_base64}`;
+      } else if (gradioSegmentedImageBase64) {
+        finalAffectedImageForState = gradioSegmentedImageBase64;
+      }
+
+      const primaryCategory = (gradioPredictedDiseaseLabel || "").toLowerCase();
+      if (["fungi", "phytophthora", "nematode"].includes(primaryCategory)) {
+        specificDiseasePrediction = await fetchPrediction(file);
+        predictionSource = "secondary";
+        if (specificDiseasePrediction?.class) {
+          finalDiseaseName = specificDiseasePrediction.class;
+        } else {
+          finalDiseaseName = gradioPredictedDiseaseLabel;
+          predictionSource = "gradio";
+        }
+      } else {
+        finalDiseaseName = gradioPredictedDiseaseLabel;
+      }
+
+      if (!finalDiseaseName) {
+        alert("Could not determine a valid disease name.");
+        setLoading(false);
         return;
       }
 
-      const severityData = await fetchSeverity(file);
       const predictionData = {
         id: Date.now(),
-        name: result.class,
+        name: finalDiseaseName,
         date: new Date().toLocaleDateString(),
-        imageUrl: imagePreview,
-        severity: severityData.severity,
-        affectedImage: severityData.affected_image_url || `data:image/png;base64,${severityData.segmentation_mask_base64}`,
+        imageUrl: imagePreviewBase64,
+        severity: severityData?.severity || null,
+        affectedImage: finalAffectedImageForState,
+        multiClassPrediction: multiClassResult,
+        specificDiseasePrediction,
+        source: predictionSource,
       };
 
       setPredictions([predictionData, ...predictions]);
 
-      navigate(`/result/${result.class.toLowerCase().replace(" ", "-")}`, {
+      navigate(`/result/${finalDiseaseName.toLowerCase().replace(" ", "-")}`, {
         state: {
-          imageUrl: imagePreview,
+          imageUrl: predictionData.imageUrl,
           severity: predictionData.severity,
           affectedImage: predictionData.affectedImage,
+          multiClassPrediction: predictionData.multiClassPrediction,
+          specificDiseasePrediction: predictionData.specificDiseasePrediction,
         },
       });
     } catch (err) {
       console.error("❌ Prediction Error:", err);
-      alert("An error occurred during prediction.");
+      if (err.message.includes("Network Error") || err.message.includes("CORS")) {
+        alert("CORS or Network issue. Check backend server.");
+      } else {
+        alert("Prediction error: " + err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -78,7 +163,7 @@ function ImageUpload() {
 
   const handleCancel = () => {
     setFile(null);
-    setImagePreview(null);
+    setImagePreviewBase64(null);
     setUseCamera(false);
     if (fileInputRef.current) fileInputRef.current.value = null;
   };
@@ -86,11 +171,10 @@ function ImageUpload() {
   return (
     <div className="p-6 text-white border shadow-lg border-white/10 rounded-2xl bg-white/5 backdrop-blur-md">
       <h2 className="mb-6 text-xl font-bold text-green-200">Upload a Leaf Image</h2>
-
       <div className="flex flex-col items-center gap-6">
-        {imagePreview && (
+        {imagePreviewBase64 && (
           <img
-            src={imagePreview}
+            src={imagePreviewBase64}
             alt="Preview"
             className="w-full max-w-sm border shadow-lg rounded-xl border-white/20"
           />
@@ -120,7 +204,6 @@ function ImageUpload() {
               >
                 Upload from Device
               </button>
-
               <button
                 onClick={() => setUseCamera(true)}
                 className="px-5 py-2 text-white bg-green-600 rounded-lg hover:bg-green-500"
@@ -128,7 +211,6 @@ function ImageUpload() {
                 Capture from Camera
               </button>
             </div>
-
             <input
               ref={fileInputRef}
               type="file"
