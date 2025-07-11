@@ -19,7 +19,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version:
-            "18" # Specify the Node.js version your project uses (e.g., '16', '18', '20').
+            "20" # Specify the Node.js version your project uses (e.g., '16', '18', '20').
             # Match this with your local development environment's Node.js version.
           cache: "npm" # Use 'npm' to cache dependencies. If you use Yarn, change this to 'yarn'.
 
