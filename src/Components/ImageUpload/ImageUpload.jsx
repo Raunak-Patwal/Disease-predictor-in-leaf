@@ -95,7 +95,38 @@ function ImageUpload() {
         probabilities: gradioProbabilities,
       };
 
-      severityData = await fetchSeverity(file);
+      // *** MODIFICATION START ***
+      const primaryCategory = (gradioPredictedDiseaseLabel || "").toLowerCase();
+
+      // Conditionally call fetchPrediction only for "fungi" or "phytophthora"
+      if (primaryCategory === "fungi" || primaryCategory === "phytophthora") {
+        specificDiseasePrediction = await fetchPrediction(file);
+        // If specific prediction is successful, use it as final disease name and source
+        if (specificDiseasePrediction?.class) {
+          finalDiseaseName = specificDiseasePrediction.class;
+          predictionSource = "secondary";
+        } else {
+          // Fallback to gradio prediction if specific prediction fails or is not found
+          finalDiseaseName = gradioPredictedDiseaseLabel;
+          predictionSource = "gradio";
+        }
+      } else {
+        // For "nematode", "virus", "healthy", "early-blight", "late-blight" (if they are
+        // directly returned by Gradio and not refined by fetchPrediction),
+        // or any other category, use the Gradio prediction directly.
+        finalDiseaseName = gradioPredictedDiseaseLabel;
+        predictionSource = "gradio";
+      }
+
+      // Call fetchSeverity for all cases where severity makes sense
+      // (excluding healthy, virus, nematode as per your Result component's logic)
+      if (primaryCategory !== "nematode" && primaryCategory !== "virus" && primaryCategory !== "healthy") {
+          severityData = await fetchSeverity(file);
+      } else {
+          severityData = null; // Ensure severity is null for these categories
+      }
+      // *** MODIFICATION END ***
+
 
       let finalAffectedImageForState = null;
       if (severityData?.affected_image_url?.startsWith("data:image/")) {
@@ -104,20 +135,6 @@ function ImageUpload() {
         finalAffectedImageForState = `data:image/png;base64,${severityData.segmentation_mask_base64}`;
       } else if (gradioSegmentedImageBase64) {
         finalAffectedImageForState = gradioSegmentedImageBase64;
-      }
-
-      const primaryCategory = (gradioPredictedDiseaseLabel || "").toLowerCase();
-      if (["fungi", "phytophthora", "nematode"].includes(primaryCategory)) {
-        specificDiseasePrediction = await fetchPrediction(file);
-        predictionSource = "secondary";
-        if (specificDiseasePrediction?.class) {
-          finalDiseaseName = specificDiseasePrediction.class;
-        } else {
-          finalDiseaseName = gradioPredictedDiseaseLabel;
-          predictionSource = "gradio";
-        }
-      } else {
-        finalDiseaseName = gradioPredictedDiseaseLabel;
       }
 
       if (!finalDiseaseName) {
